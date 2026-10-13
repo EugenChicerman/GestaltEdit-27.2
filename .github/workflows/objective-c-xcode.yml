@@ -1,0 +1,57 @@
+name: Build GestaltEdit (unsigned)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-gestaltedit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: xcode-27
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks | grep -E 'iOS|iPhoneOS' || true
+      - name: Build unsigned archive
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -project GestaltEdit.xcodeproj \
+            -scheme GestaltEdit \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/GestaltEdit.xcarchive" \
+            CODE_SIGN_IDENTITY='' \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Package IPA
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/GestaltEdit.xcarchive/Products/Applications/GestaltEdit.app"
+          test -d "$APP"
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP"
+          zip -qry "GestaltEdit-27.2-unsigned.ipa" Payload
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GestaltEdit-27.2-unsigned
+          path: ${{ runner.temp }}/GestaltEdit-27.2-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 7
